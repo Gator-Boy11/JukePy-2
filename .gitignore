@@ -123,3 +123,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+local_music_source/config.toml
+local_music_source/music
+local_music_source/libav-x86_64-w64-mingw32-11.7
