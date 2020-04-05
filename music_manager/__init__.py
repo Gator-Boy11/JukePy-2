@@ -3,10 +3,12 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 import collections
 from functools import partial
+import struct
 # import time
 
 import pyaudio
 from fuzzywuzzy import fuzz
+import numpy as np
 
 from . import playlib
 
@@ -27,6 +29,9 @@ Song = collections.namedtuple("Song", "source id")
 _player_state = 0
 _player_state_change = threading.Event()
 _player_state_change_complete = threading.Event()
+
+volume = 1.0
+rate = 1.0
 
 
 def _register_(serviceList, pluginProperties):
@@ -68,21 +73,47 @@ def closeThread():
     _playing.set()
     runThread.join()
 
+formats = {
+    1: np.uint8,
+    2: np.int16,
+    4: np.int32
+    }
 
 def player_callback(track, t_data, in_data, frame_count, time_info, status):
-    global _frame_counter
+    global _frame_counter, volume, rate
     chunk_size = frame_count \
         * t_data["frame_width"] \
         * t_data["channels"]
     if _frame_counter >= 0:
+        #data = None
         if len(track) >= _frame_counter + chunk_size:
             data = track[_frame_counter:_frame_counter + chunk_size]
-            _frame_counter += chunk_size
+            _frame_counter += int(frame_count * rate) \
+                * t_data["frame_width"] \
+                * t_data["channels"]
+            # _frame_couter += chunk_size
+            #count = len(data) // t_data["frame_width"]
+            #samples = struct.unpack("<"+formats[t_data["frame_width"]]*count, data)
+            #samples = map(lambda x: int(x * volume), samples)
+            #data = struct.pack("<"+formats[t_data["frame_width"]]*count, *samples)
+            #print(len(data))
+            format = formats[t_data["frame_width"]]
+            s = np.frombuffer(data, format).astype(np.float64)
+            s = s * volume
+            if rate <= 0:
+                s = np.flip(s)
+            data = s.astype(format).tobytes()
             return (data, pyaudio.paContinue)
         else:
             data = track[_frame_counter:]
             _frame_counter = -1
             set_player_state(70, True)
+            format = formats[t_data["frame_width"]]
+            s = np.frombuffer(data, format).astype(np.float64)
+            s = s * volume
+            if rate <= 0:
+                s = np.flip(s)
+            data = s.astype(np.format).tobytes()
             return (data, pyaudio.paComplete)
     else:
         _frame_counter = -1
@@ -126,11 +157,19 @@ def threadScript():
             except StopIteration:
                 set_player_state(0, True)
                 continue
+            print("getting audio")
             track = music_sources[song.source].get_track(song.id)
             track_data = list(
                 music_sources[song.source].get_track_data(song.id)
                 )[0]
-            _frame_counter = 0
+            print("audio gotten")
+            if rate > 0:
+                _frame_counter = 0
+            else:
+                chunk_size = 2048 \
+                    * track_data["frame_width"] \
+                    * track_data["channels"]
+                _frame_counter = len(track) - chunk_size
             stream = p.open(
                 format=p.get_format_from_width(track_data["frame_width"]),
                 channels=track_data["channels"],
@@ -484,8 +523,24 @@ Usage: {0} [options]
     print(args)
 
 
-def command_playing(arguments):
-    pass
+def command_volume(arguments):
+    global volume
+    if len(arguments) == 2:
+        val = arguments[1]
+        if not isinstance(val, str):
+            val = ".".join(val)
+        volume = float(val)
+    print(volume)
+
+def command_rate(arguments):
+    global rate
+    print(arguments)
+    if len(arguments) == 2:
+        val = arguments[1]
+        if not isinstance(val, str):
+            val = ".".join(val)
+        rate = float(val)
+    print(rate)
 
 
 subcommands = {"shuffle": command_set_shuffle,
@@ -500,4 +555,6 @@ subcommands = {"shuffle": command_set_shuffle,
                "skip": command_next,
                "prev": command_prev,
                "previous": command_prev,
+               "volume": command_volume,
+               "rate": command_rate,
                }

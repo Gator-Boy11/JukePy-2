@@ -4,5 +4,5 @@
 # Internal variables. DO NOT CHANGE THIS
 format = "0.1.0"
 namespace = "00000000-0000-0000-0000-000000000000"
-rescan_delay = 10
+rescan_delay = 60
 keyring_name = "APPLES_plex_music_source"
