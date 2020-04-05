@@ -120,10 +120,6 @@ def _register_(serviceList, pluginProperties):
         def get_track(self, trackid):
             track_data = self._tracks[trackid]
             response = requests.get(track_data["url"])
-            if response.status_code == 200:
-                with open(r"C:\Users\David\Desktop\test.mp3", 'wb') as f:
-                    for chunk in response:
-                        f.write(chunk)
             handle = io.BytesIO(response.content)
             track = AudioSegment.from_file(
                 handle,
