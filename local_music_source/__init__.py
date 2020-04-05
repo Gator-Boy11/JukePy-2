@@ -35,7 +35,8 @@ config = {}
 def _setup_config():
     global config
     config = toml.load("local_music_source/default_config.toml")
-    config.update(toml.load("local_music_source/default_config.toml"))
+    if os.path.exists("local_music_source/config.toml"):
+        config.update(toml.load("local_music_source/config.toml"))
     config["track"] = config.get("track", {})
     if config["namespace"] == "00000000-0000-0000-0000-000000000000":
         config["namespace"] = str(uuid.uuid1())
@@ -163,9 +164,8 @@ def _register_(serviceList, pluginProperties):
         def get_status(self):
             return music_manager.Status.READY
 
-
-def get_music_source():
-    return LocalMusicSource
+    # replace with lines for multiple directories
+    music_manager.add_source(LocalMusicSource())
 
 
 def loopTask():

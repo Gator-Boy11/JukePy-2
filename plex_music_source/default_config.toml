@@ -5,7 +5,4 @@
 format = "0.1.0"
 namespace = "00000000-0000-0000-0000-000000000000"
 rescan_delay = 10
-
-[[directory]]
-name = "_default"
-path = "local_music_source/music/"
+keyring_name = "APPLES_plex_music_source"

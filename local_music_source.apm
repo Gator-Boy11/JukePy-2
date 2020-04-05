@@ -1,6 +1,6 @@
 [properties]
 name = local_music_source
-version = 0.1.0
+version = 0.2.0
 service = music_manager_source
 exclusive = no
 
@@ -11,4 +11,4 @@ after = [{"plugin":"$music_manager", "priority":0}]
 [updates]
 remoteroot = https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/
 localroot = _APPLES_/
-files = [["local_music_source.apm", "local_music_source.apm"], ["local_music_source/__init__.py", "local_music_source/__init__.py"]]
+files = [["local_music_source.apm", "local_music_source.apm"], ["local_music_source/__init__.py", "local_music_source/__init__.py"], ["local_music_source/default_config.toml", "local_music_source/default_config.toml"]]

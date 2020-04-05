@@ -26,6 +26,7 @@ Song = collections.namedtuple("Song", "source id")
 
 _player_state = 0
 _player_state_change = threading.Event()
+_player_state_change_complete = threading.Event()
 
 
 def _register_(serviceList, pluginProperties):
@@ -33,7 +34,7 @@ def _register_(serviceList, pluginProperties):
     services = serviceList
     plugin = pluginProperties
     core = services["core"][0]
-    core.addStart(setup)
+    # core.addStart(setup)
     core.addStart(startThread)
     core.addClose(closeThread)
     # core.addLoop(loopTask)
@@ -48,12 +49,10 @@ def loopTask():
     pass
 
 
-def setup():
+def add_source(source):
     global music_sources
-    for service in services["music_manager_source"]:
-        source = service.get_music_source()()
-        source.login()
-        music_sources.append(source)
+    source.login()
+    music_sources.append(source)
 
 
 def startThread():
@@ -83,19 +82,23 @@ def player_callback(track, t_data, in_data, frame_count, time_info, status):
         else:
             data = track[_frame_counter:]
             _frame_counter = -1
-            set_player_state(70)
+            set_player_state(70, True)
             return (data, pyaudio.paComplete)
     else:
         _frame_counter = -1
-        set_player_state(70)
+        set_player_state(70, True)
         return (b'', pyaudio.paComplete)
 
 
-def set_player_state(state):
+def set_player_state(state, unsafe=False):
     global _player_state
-    _player_state = state
-    # print(f"ps{_player_state}")
-    _player_state_change.set()
+    if unsafe:
+        _player_state = state
+        _player_state_change.set()
+    else:
+        _player_state_change_complete.clear()
+        set_player_state(state, True)
+        _player_state_change_complete.wait()
 
 
 def threadScript():
@@ -115,18 +118,18 @@ def threadScript():
         elif _player_state == 10:
             # start playing queue
             iter(_queue)
-            set_player_state(20)
+            set_player_state(20, True)
         elif _player_state == 20:
             # start playing new song
             try:
                 song = next(_queue)
             except StopIteration:
-                set_player_state(0)
+                set_player_state(0, True)
                 continue
+            track = music_sources[song.source].get_track(song.id)
             track_data = list(
                 music_sources[song.source].get_track_data(song.id)
                 )[0]
-            track = music_sources[song.source].get_track(song.id)
             _frame_counter = 0
             stream = p.open(
                 format=p.get_format_from_width(track_data["frame_width"]),
@@ -135,11 +138,11 @@ def threadScript():
                 output=True,
                 stream_callback=partial(player_callback, track, track_data)
                 )
-            set_player_state(30)
+            set_player_state(30, True)
         elif _player_state == 30:
             # (re)start playing song
             stream.start_stream()
-            set_player_state(40)
+            set_player_state(40, True)
         elif _player_state == 40:
             # song is playing
             # print("playing")
@@ -147,7 +150,7 @@ def threadScript():
         elif _player_state == 50:
             # song is pausing
             stream.stop_stream()
-            set_player_state(60)
+            set_player_state(60, True)
         elif _player_state == 60:
             # song is paused
             # print("paused")
@@ -156,13 +159,14 @@ def threadScript():
             # song is closing and queue is continuing
             stream.stop_stream()
             stream.close()
-            set_player_state(20)
+            set_player_state(20, True)
         elif _player_state == 80:
             # song is closing and queue is going back one song
             stream.stop_stream()
             stream.close()
             _queue.prev()
-            set_player_state(20)
+            set_player_state(20, True)
+        _player_state_change_complete.set()
 
 
 class Status(IntEnum):
@@ -218,7 +222,6 @@ def set_queue(items=[], order=[]):
     if was_stopped:
         set_playing(True)
 
-
 def set_playing(state):
     if state:
         if _player_state == 0:
@@ -228,11 +231,6 @@ def set_playing(state):
     else:
         if _player_state == 40:
             set_player_state(50)
-    return None
-    if state:
-        _playing.set()
-    else:
-        _playing.clear()
 
 
 def set_shuffle(state):
@@ -307,9 +305,12 @@ Usage: {0} [<song> [options] | --id <songid>]...
     -a <artist>, --artist <artist>  Specific artist to look under.
     """
     if len(arguments) > 1:
+        stop()
         command_remove_queue([["remove_queue"]])
         command_add_queue(arguments)
     set_playing(True)
+    while _player_state < 40:
+        _player_state_change.wait()
 
 
 def command_pause(arguments):
