@@ -79,7 +79,7 @@ formats = {
     4: np.int32
     }
 
-def player_callback(track, t_data, in_data, frame_count, time_info, status):
+def player_callback_bytes(track, t_data, in_data, frame_count, time_info, status):
     global _frame_counter, volume, rate
     chunk_size = frame_count \
         * t_data["frame_width"] \
@@ -91,12 +91,6 @@ def player_callback(track, t_data, in_data, frame_count, time_info, status):
             _frame_counter += int(frame_count * rate) \
                 * t_data["frame_width"] \
                 * t_data["channels"]
-            # _frame_couter += chunk_size
-            #count = len(data) // t_data["frame_width"]
-            #samples = struct.unpack("<"+formats[t_data["frame_width"]]*count, data)
-            #samples = map(lambda x: int(x * volume), samples)
-            #data = struct.pack("<"+formats[t_data["frame_width"]]*count, *samples)
-            #print(len(data))
             format = formats[t_data["frame_width"]]
             s = np.frombuffer(data, format).astype(np.float64)
             s = s * volume
@@ -113,7 +107,37 @@ def player_callback(track, t_data, in_data, frame_count, time_info, status):
             s = s * volume
             if rate <= 0:
                 s = np.flip(s)
-            data = s.astype(np.format).tobytes()
+            data = s.astype(format).tobytes()
+            return (data, pyaudio.paComplete)
+    else:
+        _frame_counter = -1
+        set_player_state(70, True)
+        return (b'', pyaudio.paComplete)
+
+def player_callback_track(track, t_data, in_data, frame_count, time_info, status):
+    global _frame_counter, volume, rate
+    chunk_size = frame_count
+    if _frame_counter >= 0:
+        if track.end is None or track.end >= _frame_counter + chunk_size:
+            data = track.grab_frames(_frame_counter, _frame_counter + chunk_size)
+            _frame_counter += int(frame_count * rate)
+            format = formats[t_data["frame_width"]]
+            s = data.astype(np.float64)
+            s = s * volume
+            if rate <= 0:
+                s = np.flip(s)
+            data = s.astype(format).tobytes()
+            return (data, pyaudio.paContinue)
+        else:
+            data = track.grab_frames(_frame_counter, track.end)
+            _frame_counter = -1
+            set_player_state(70, True)
+            format = formats[t_data["frame_width"]]
+            s = data.astype(np.float64)
+            s = s * volume
+            if rate <= 0:
+                s = np.flip(s)
+            data = s.astype(format).tobytes()
             return (data, pyaudio.paComplete)
     else:
         _frame_counter = -1
@@ -157,12 +181,10 @@ def threadScript():
             except StopIteration:
                 set_player_state(0, True)
                 continue
-            print("getting audio")
             track = music_sources[song.source].get_track(song.id)
             track_data = list(
                 music_sources[song.source].get_track_data(song.id)
                 )[0]
-            print("audio gotten")
             if rate > 0:
                 _frame_counter = 0
             else:
@@ -170,13 +192,22 @@ def threadScript():
                     * track_data["frame_width"] \
                     * track_data["channels"]
                 _frame_counter = len(track) - chunk_size
-            stream = p.open(
-                format=p.get_format_from_width(track_data["frame_width"]),
-                channels=track_data["channels"],
-                rate=track_data["frame_rate"],
-                output=True,
-                stream_callback=partial(player_callback, track, track_data)
-                )
+            if isinstance(track, MusicTrack):
+                stream = p.open(
+                    format=p.get_format_from_width(track_data["frame_width"]),
+                    channels=track_data["channels"],
+                    rate=track_data["frame_rate"],
+                    output=True,
+                    stream_callback=partial(player_callback_track, track, track_data)
+                    )
+            else:
+                stream = p.open(
+                    format=p.get_format_from_width(track_data["frame_width"]),
+                    channels=track_data["channels"],
+                    rate=track_data["frame_rate"],
+                    output=True,
+                    stream_callback=partial(player_callback_bytes, track, track_data)
+                    )
             set_player_state(30, True)
         elif _player_state == 30:
             # (re)start playing song
@@ -244,6 +275,37 @@ class MusicSource(ABC):
     @abstractmethod
     def get_status(self):
         pass
+
+
+class MusicTrack:
+    def __init__(self, file_like, song, min_chunk=65536):
+        self._file_like = file_like
+        self._song = song
+        source = self._song.source
+        self._track_data = next(source.get_track_data(self._song.id))
+        self._format = formats[self._track_data["frame_width"]]
+        self._channels = self._track_data["channels"]
+        self._frame_width = self._track_data["frame_width"]
+        self._array = np.zeros((0, self._track_data["channels"]), self._format)
+        self._min_chunk = min_chunk
+        self.end = None
+
+    def grab_frames(self, start, stop):
+        position = max(start, stop)
+        if self.end is None and position > len(self._array):
+            fc = max(position - len(self._array), self._min_chunk)
+            chunk = fc * self._frame_width * self._channels
+            frame_raw_data = self._file_like.read(chunk)
+            frame_data = np.frombuffer(frame_raw_data, self._format)
+            frame_data = frame_data.reshape((-1, self._channels))
+            self._array = np.concatenate((self._array, frame_data), axis=0)
+            if len(frame_raw_data) < chunk:
+                self.end = len(self._array)
+                # Padding in case reads go too far. Two chunks
+                z = np.zeros((chunk * 2, self._track_data["channels"]),
+                             self._format)
+                self._array = np.concatenate((self._array, z), axis=0)
+        return self._array[start:stop]
 
 
 def set_queue(items=[], order=[]):
@@ -520,11 +582,18 @@ Usage: {0} [options]
             elif arg.startswith("-"):
                 for letter in arg[1:]:
                     args.add(letter)
-    print(args)
+    #print(args)
 
 
 def command_volume(arguments):
     global volume
+    """
+Info:
+    Sets the volume for music. Default is 1.0. Volume levels over 1.0 can cause
+    artifacts (clipping).
+
+Usage: {0} [rate]
+    """
     if len(arguments) == 2:
         val = arguments[1]
         if not isinstance(val, str):
@@ -534,7 +603,13 @@ def command_volume(arguments):
 
 def command_rate(arguments):
     global rate
-    print(arguments)
+    """
+Info:
+    Sets the play speed for music. Does not affect pitch. Can cause artifacts.
+    Default is 1.0. Negative speed will play music backwards
+
+Usage: {0} [rate]
+    """
     if len(arguments) == 2:
         val = arguments[1]
         if not isinstance(val, str):

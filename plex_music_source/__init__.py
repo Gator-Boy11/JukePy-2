@@ -14,7 +14,8 @@ if platform.system() == "Windows":
         + "libav-x86_64-w64-mingw32-11.7/usr/bin".replace("/", os.sep)
 
 import toml
-from pydub import AudioSegment
+#from pydub import AudioSegment
+import ffmpeg
 import keyring
 import plexapi
 import plexapi.myplex
@@ -94,16 +95,9 @@ def _register_(serviceList, pluginProperties):
             tracks = {}
             images = {}
             for item in self._connection.library.section(self._section).all():
-                #print(item)
-                #print(type(item))
                 if isinstance(item, plexapi.audio.Artist):
                     for plex_track in item.tracks():
-                        #print("    " + str(plex_track))
-                        #print("    " + str(plex_track.getStreamURL()))
                         unique = plex_track.key
-                        '''unique = str(plex_track.parentRatingKey) \
-                            + str(plex_track.grandparentRatingKey) \
-                            + str(plex_track.ratingKey)'''
                         u = str(uuid.uuid5(self._ns, unique))
                         track = {}
                         track["id"] = u
@@ -111,7 +105,9 @@ def _register_(serviceList, pluginProperties):
                         track["title"] = plex_track.title
                         track["artist"] = plex_track.artist().title
                         track["album"] = plex_track.album().title
-                        track["type"] = "mp3"
+                        track["frame_rate"] = 48000
+                        track["frame_width"] = 2
+                        track["channels"] = 2
                         tracks[u] = track
             self._tracks = tracks
             self._images = images
@@ -119,17 +115,20 @@ def _register_(serviceList, pluginProperties):
 
         def get_track(self, trackid):
             track_data = self._tracks[trackid]
-            response = requests.get(track_data["url"])
-            handle = io.BytesIO(response.content)
-            track = AudioSegment.from_file(
-                handle,
-                track_data["type"],
-                )
-            track_data["frame_rate"] = track.frame_rate
-            track_data["frame_width"] = track.sample_width
-            track_data["channels"] = track.channels
-            self._tracks[trackid] = track_data
-            return track.raw_data
+            track = (ffmpeg.input(track_data["url"], )
+                     .output('-',
+                             format='s16le',
+                             acodec='pcm_s16le',
+                             ac=track_data["channels"],
+                             ar=track_data["frame_rate"])
+                     .run_async(cmd="ffmpeg",
+                                pipe_stdout=True,
+                                quiet=True)
+                     )
+            track = music_manager.MusicTrack(
+                track.stdout,
+                music_manager.Song(self, trackid))
+            return track
 
         def get_track_data(self, trackid=None):
             if trackid is None:
