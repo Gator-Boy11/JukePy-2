@@ -134,3 +134,7 @@ local_music_source/libav-x86_64-w64-mingw32-11.7
 # Plex Music Source
 plex_music_source/config.toml
 plex_music_source/libav-x86_64-w64-mingw32-11.7
+
+# Music Manager
+music_manager/config.toml
+music_manager/playlists.json

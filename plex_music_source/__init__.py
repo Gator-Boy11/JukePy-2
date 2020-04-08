@@ -85,7 +85,7 @@ def _register_(serviceList, pluginProperties):
             self.rescan()
 
         def get_static_id(self):
-            return self._static_id
+            return str(self._static_id)
 
         @classmethod
         def _write_config(self):
@@ -149,6 +149,33 @@ def _register_(serviceList, pluginProperties):
 
         def get_status(self):
             return music_manager.Status.READY
+
+        def get_playlists(self):
+            plex_playlists = self._connection.playlists()
+            #print(plex_playlists)
+            #input("enter to continue")
+            for plex_playlist in plex_playlists:
+                unique = plex_playlist.key
+                name = plex_playlist.title
+                source = self.get_static_id()
+                id = str(uuid.uuid5(self._ns, unique))
+                songs = []
+                for raw_song in plex_playlist.items():
+                    song_unique = raw_song.key
+                    u = str(uuid.uuid5(self._ns, song_unique))
+                    #print(raw_song.title)
+                    songs.append(music_manager.Song(self, u))
+                saveable = False
+                writeable = False
+                #print(name, source, id)
+                #input("enter to continue")
+                yield music_manager.Playlist(name,
+                                             source,
+                                             id,
+                                             songs,
+                                             saveable,
+                                             writeable)
+            #return []
 
     PlexMusicSource._write_config()
     print("\nScanning plex library, this may take a while... ", end="")

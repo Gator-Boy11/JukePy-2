@@ -62,7 +62,7 @@ def _register_(serviceList, pluginProperties):
             self.rescan()
 
         def get_static_id(self):
-            return self._ns
+            return str(self._ns)
 
         '''def login(self):
             return self.get_status()'''

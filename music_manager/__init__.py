@@ -4,13 +4,19 @@ from enum import IntEnum
 import collections
 from functools import partial
 import json
-# import time
+import uuid
 
 import pyaudio
 from fuzzywuzzy import fuzz, process
 import numpy as np
+import toml
 
 from . import playlib
+
+config = {
+    "format": "0.1.0",
+    "namespace": "00000000-0000-0000-0000-000000000000"
+}
 
 services = {}
 music_sources = []
@@ -26,6 +32,11 @@ _playing = threading.Event()
 _stopped = threading.Event()
 playing = False
 Song = collections.namedtuple("Song", "source id")
+Playlist = collections.namedtuple(
+    "Playlist",
+    "name source id songs saveable writeable")
+playlists = []
+_playlist_path = __file__[:-11] + "playlists.json"
 
 _player_state = 0
 _player_state_change = threading.Event()
@@ -34,16 +45,17 @@ _player_state_change_complete = threading.Event()
 volume = 1.0
 rate = 1.0
 
+_ready = False
+
 
 def _register_(serviceList, pluginProperties):
     global services, plugin, core
     services = serviceList
     plugin = pluginProperties
     core = services["core"][0]
-    # core.addStart(setup)
-    core.addStart(startThread)
-    core.addClose(closeThread)
-    # core.addLoop(loopTask)
+    core.addStart(setup)
+    core.addStart(start_thread)
+    core.addClose(close_thread)
     userInterface = services["userInterface"][0]
     userInterface.addCommands(subcommands)
     for set in ["music_manager", "player"]:
@@ -51,8 +63,26 @@ def _register_(serviceList, pluginProperties):
     set_queue([], ())
 
 
-def loopTask():
-    pass
+def setup():
+    global _ready
+    update_config()
+    open_playlists()
+    for source in music_sources:
+        add_playlists(source.get_playlists())
+    fix_playlists()
+    _ready = True
+
+
+def update_config():
+    global config
+    try:
+        config.update(toml.load("music_manager/config.toml"))
+    except FileNotFoundError:
+        pass
+    if config["namespace"] == "00000000-0000-0000-0000-000000000000":
+        config["namespace"] = str(uuid.uuid4())
+    with open("music_manager/config.toml", "w") as f:
+        toml.dump(config, f)
 
 
 def add_source(source):
@@ -60,20 +90,102 @@ def add_source(source):
     source.login()
     static_ids[source.get_static_id()] = len(music_sources)
     music_sources.append(source)
+    if _ready:
+        fix_playlists()
+        add_playlists(music_sources[-1].get_playlists())
 
 
-def startThread():
+def start_thread():
     global runThread, threadActive
     threadActive = True
     runThread = threading.Thread(target=threadScript)
     runThread.start()
 
 
-def closeThread():
+def close_thread():
     global runThread, threadActive
     threadActive = False
     _playing.set()
     runThread.join()
+
+
+def save_playlists():
+    saveable_playlists = []
+    for playlist in playlists:
+        if playlist.saveable:
+            sp = list(playlist)
+            object_sp_songs = sp[3]
+            raw_sp_songs = []
+            for song in object_sp_songs:
+                if isinstance(song.source, MusicSource):
+                    raw_song_source = song.source.get_static_id()
+                else:
+                    raw_song_source = song.source
+                raw_song_id = song.id
+                raw_sp_songs.append((raw_song_source, raw_song_id))
+            sp[3] = raw_sp_songs
+            saveable_playlists.append(sp)
+    with open(_playlist_path, "w") as playlist_file:
+        json.dump(saveable_playlists, playlist_file)
+
+
+def fix_playlists():
+    global playlists
+    for playlist in range(len(playlists)):
+        editable = list(playlists[playlist])
+        fixed = False
+        for song in range(len(editable[3])):
+            s = editable[3][song]
+            song_source = s.source
+            if not isinstance(song_source, MusicSource):
+                if static_ids.get(song_source, None) is None:
+                    song_source = song_source
+                else:
+                    song_source = music_sources[static_ids[song_source]]
+                editable[3][song] = Song(song_source, s.id)
+                fixed = True
+        if fixed:
+            playlists[playlist] = Playlist(*editable)
+
+
+def add_playlists(lists):
+    old_length = len(playlists)
+    for playlist in lists:
+        playlists.append(playlist)
+    new_length = len(playlists)
+    if old_length != new_length:
+        save_playlists()
+
+
+def open_playlists():
+    global playlists
+    playlists = []
+    try:
+        with open(_playlist_path, "r") as playlist_file:
+            raw_playlists = json.load(playlist_file)
+            for p in raw_playlists:
+                name = p[0]
+                source = p[1]
+                id = p[2]
+                raw_songs = p[3]
+                saveable = p[4]
+                writeable = p[5]
+                songs = []
+                for raw_song in raw_songs:
+                    if static_ids.get(raw_song[0], None) is None:
+                        song_source = raw_song[0]
+                    else:
+                        song_source = music_sources[static_ids[raw_song[0]]]
+                    song_id = raw_song[1]
+                    songs.append(Song(song_source, song_id))
+                playlists.append(Playlist(name,
+                                          source,
+                                          id,
+                                          songs,
+                                          saveable,
+                                          writeable))
+    except FileNotFoundError:
+        pass
 
 
 formats = {
@@ -287,7 +399,7 @@ class MusicSource(ABC):
         pass
 
     def get_playlists(self):
-        pass
+        return []
 
     @abstractmethod
     def get_status(self):
@@ -344,6 +456,12 @@ def set_queue(items=[], order=[]):
     _queue = playlib.Playlist(items, order)
     if was_stopped:
         set_playing(True)
+
+
+def set_queue_playlist(playlist):
+    q = [[s] for s in playlist.songs]
+    o = [(s, 0) for s in range(len(playlist.songs))]
+    set_queue(q, o)
 
 
 def set_playing(state):
@@ -621,6 +739,7 @@ Info:
 Usage: {0} [options]
     -i, --id      Show song IDs.
     -a, --artist  Show song artists.
+    -A, --album   Show song album.
     -s, --source  Show song sources.
     """
     args = set()
@@ -631,11 +750,28 @@ Usage: {0} [options]
                     args.add("i")
                 if "--artist" == arg:
                     args.add("a")
+                if "--album" == arg:
+                    args.add("A")
                 if "--source" == arg:
                     args.add("s")
             elif arg.startswith("-"):
                 for letter in arg[1:]:
                     args.add(letter)
+    for song_set in _queue_items:
+        for song in song_set:
+            track_data = list(
+                song.source.get_track_data(song.id)
+                )[0]
+            pretty_string = track_data.get("title", "[NO TITLE]")
+            if "i" in args:
+                pretty_string += " | " + track_data.get("id", "[NO ID]")
+            if "a" in args:
+                pretty_string += " | " + track_data.get("artist", "[NO ARTIST]")
+            if "A" in args:
+                pretty_string += " | " + track_data.get("album", "[NO ALBUM]")
+            if "s" in args:
+                pretty_string += " | sources not yet supported"
+            print(pretty_string)
 
 
 def command_volume(arguments):
@@ -658,7 +794,7 @@ Usage: {0} [rate]
 def command_rate(arguments):
     """
 Info:
-    Sets the play speed for music. Does not affect pitch. Can cause artifacts.
+    Sets the play speed for music. Does not affect pitch. Will cause artifacts.
     Default is 1.0. Negative speed will play music backwards
 
 Usage: {0} [rate]
@@ -671,6 +807,136 @@ Usage: {0} [rate]
         rate = float(val)
     print(rate)
 
+def command_play_playlist(arguments):
+    """
+Info:
+    Plays a playlist with a specific name.
+
+Usage: {0} <playlist>
+    """
+    if len(arguments) > 1:
+        arguments.pop(0)
+        playlist_name = ""
+        for argument in arguments:
+            if isinstance(argument, str):
+                playlist_name += argument + " "
+            else:
+                for fragment in argument[:-1]:
+                    playlist_name += fragment + ". "
+                playlist_name += argument[-1]
+        playlist_name = playlist_name.strip()
+        stop()
+        command_remove_queue([["remove_queue"]])
+        playlist_name = process.extractOne(
+            playlist_name,
+            [playlist.name for playlist in playlists])[0]
+        for playlist in playlists:
+            if playlist.name == playlist_name:
+                set_queue_playlist(playlist)
+                set_playing(True)
+                return
+    else:
+        print("Playlist must be specified.")
+
+def command_list_playlists(arguments):
+    """
+Info:
+    Lists all available playlists.
+
+Usage: {0} <playlist>
+    """
+    for playlist in playlists:
+        print(playlist.name)
+
+
+def command_create_playlist(arguments):
+    """
+Info:
+    Creates a new playlist.
+
+Usage: {0} <playlist name> (<song> [options] | --id <songid>)...
+
+    -s <source>, --source <source>  Specific source to look under.
+    -a <artist>, --artist <artist>  Specific artist to look under.
+    """
+    '''if len(arguments) > 1:
+        arguments.pop(0)
+        playlist_name = ""
+        for argument in arguments:
+            if isinstance(argument, str):
+                playlist_name += argument + " "
+            else:
+                for fragment in argument[:-1]:
+                    playlist_name += fragment + ". "
+                playlist_name += argument[-1]
+        playlist_name = playlist_name.strip()'''
+    playlist_name = arguments[1]
+    arguments = arguments[2:]
+    items = []
+    while len(arguments) > 0:
+        sid = arguments.pop(0)
+        if sid.lower() == "--id":
+            sid = arguments.pop(0)
+            for source in range(len(music_sources)):
+                if next(music_sources[source].get_track_data(sid)) is not None:
+                    song = Song(music_sources[source], sid)
+                    items.append(song)
+                    break
+        else:
+            args = {}
+            while len(arguments) > 0 and arguments[0].startswith("-"):
+                key = None
+                value = None
+                if arguments[0].startswith("--"):
+                    if arguments[0].lower() == "--id":
+                        # Stop, next song is specified by ID
+                        break
+                    if len(arguments[0].split("=")) == 2:
+                        kv = arguments.pop(0).split("=")
+                        key = kv[0].lower()
+                        value = kv[1]
+                    elif len(arguments[0].split("=")) == 1:
+                        key = arguments.pop(0)[2:].lower()
+                        value = arguments.pop(0)
+                    else:
+                        print("Invalid argument set.")
+                        return None
+                else:
+                    key = arguments.pop(0)[1:]
+                    value = arguments.pop(0)
+                args[key] = value
+            sources = list(range(len(music_sources)))
+            if args.get("source", None) is None:
+                if args.get("s", None) is None:
+                    sources = list(range(len(music_sources)))
+                else:
+                    args["source"] = args["s"]
+                    s = args["source"]
+                    if s.isdigit():
+                        sources = [int(s)]
+                    else:
+                        sources = [static_ids[s]]
+            else:
+                sources = [int(args["source"])]
+            if args.get("a") is not None:
+                args["artist"] = args["a"]
+            best = search_for_song(sources, sid, args.get("artist", None))
+            if best is not None:
+                items.append(best[1])
+            else:
+                if args.get("source", None) is None:
+                    print(f"Could not find song '{sid}'")
+                else:
+                    print(f"Could not find song '{sid}' in source "
+                          + str(args["source"]) + ".")
+    # set_queue(items, order)
+    playlists.append(Playlist(playlist_name,
+                              config["namespace"],
+                              str(uuid.uuid4()),
+                              items,
+                              True,
+                              True))
+    save_playlists()
 
 subcommands = {
                "shuffle": command_set_shuffle,
@@ -687,4 +953,9 @@ subcommands = {
                "previous": command_prev,
                "volume": command_volume,
                "rate": command_rate,
+               "play_playlist": command_play_playlist,
+               "list_playlists": command_list_playlists,
+               "list_playlist": command_list_playlists,
+               "create_playlist": command_create_playlist,
+               "make_playlist": command_create_playlist,
                }
