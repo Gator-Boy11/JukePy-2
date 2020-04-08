@@ -1,6 +1,6 @@
 [properties]
 name = plex_music_source
-version = 0.2.0
+version = 0.2.1
 service = music_manager_source
 exclusive = no
 
