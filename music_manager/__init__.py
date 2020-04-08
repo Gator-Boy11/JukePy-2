@@ -3,17 +3,18 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 import collections
 from functools import partial
-import struct
+import json
 # import time
 
 import pyaudio
-from fuzzywuzzy import fuzz
+from fuzzywuzzy import fuzz, process
 import numpy as np
 
 from . import playlib
 
 services = {}
 music_sources = []
+static_ids = {}
 plugin = {}
 core = None
 runThread = None
@@ -55,8 +56,9 @@ def loopTask():
 
 
 def add_source(source):
-    global music_sources
+    global music_sources, static_ids
     source.login()
+    static_ids[source.get_static_id()] = len(music_sources)
     music_sources.append(source)
 
 
@@ -73,19 +75,25 @@ def closeThread():
     _playing.set()
     runThread.join()
 
+
 formats = {
     1: np.uint8,
     2: np.int16,
     4: np.int32
     }
 
-def player_callback_bytes(track, t_data, in_data, frame_count, time_info, status):
+
+def player_callback_bytes(track,
+                          t_data,
+                          in_data,
+                          frame_count,
+                          time_info,
+                          status):
     global _frame_counter, volume, rate
     chunk_size = frame_count \
         * t_data["frame_width"] \
         * t_data["channels"]
     if _frame_counter >= 0:
-        #data = None
         if len(track) >= _frame_counter + chunk_size:
             data = track[_frame_counter:_frame_counter + chunk_size]
             _frame_counter += int(frame_count * rate) \
@@ -114,12 +122,19 @@ def player_callback_bytes(track, t_data, in_data, frame_count, time_info, status
         set_player_state(70, True)
         return (b'', pyaudio.paComplete)
 
-def player_callback_track(track, t_data, in_data, frame_count, time_info, status):
+
+def player_callback_track(track,
+                          t_data,
+                          in_data,
+                          frame_count,
+                          time_info,
+                          status):
     global _frame_counter, volume, rate
     chunk_size = frame_count
     if _frame_counter >= 0:
         if track.end is None or track.end >= _frame_counter + chunk_size:
-            data = track.grab_frames(_frame_counter, _frame_counter + chunk_size)
+            data = track.grab_frames(_frame_counter,
+                                     _frame_counter + chunk_size)
             _frame_counter += int(frame_count * rate)
             format = formats[t_data["frame_width"]]
             s = data.astype(np.float64)
@@ -181,9 +196,9 @@ def threadScript():
             except StopIteration:
                 set_player_state(0, True)
                 continue
-            track = music_sources[song.source].get_track(song.id)
+            track = song.source.get_track(song.id)
             track_data = list(
-                music_sources[song.source].get_track_data(song.id)
+                song.source.get_track_data(song.id)
                 )[0]
             if rate > 0:
                 _frame_counter = 0
@@ -198,7 +213,8 @@ def threadScript():
                     channels=track_data["channels"],
                     rate=track_data["frame_rate"],
                     output=True,
-                    stream_callback=partial(player_callback_track, track, track_data)
+                    stream_callback=partial(player_callback_track,
+                                            track, track_data)
                     )
             else:
                 stream = p.open(
@@ -206,7 +222,8 @@ def threadScript():
                     channels=track_data["channels"],
                     rate=track_data["frame_rate"],
                     output=True,
-                    stream_callback=partial(player_callback_bytes, track, track_data)
+                    stream_callback=partial(player_callback_bytes,
+                                            track, track_data)
                     )
             set_player_state(30, True)
         elif _player_state == 30:
@@ -263,8 +280,8 @@ class MusicSource(ABC):
     def get_track_art(self, trackid):
         pass
 
-    def get_authors(self):
-        pass
+    def get_artists(self):
+        return set([x["artist"] for x in self.get_track_data()])
 
     def get_albums(self):
         pass
@@ -274,6 +291,11 @@ class MusicSource(ABC):
 
     @abstractmethod
     def get_status(self):
+        pass
+
+    @classmethod
+    @abstractmethod
+    def get_static_id(self):
         pass
 
 
@@ -322,6 +344,7 @@ def set_queue(items=[], order=[]):
     _queue = playlib.Playlist(items, order)
     if was_stopped:
         set_playing(True)
+
 
 def set_playing(state):
     if state:
@@ -410,8 +433,8 @@ Usage: {0} [<song> [options] | --id <songid>]...
         command_remove_queue([["remove_queue"]])
         command_add_queue(arguments)
     set_playing(True)
-    while _player_state < 40:
-        _player_state_change.wait()
+    #while _player_state < 40:
+    #    _player_state_change.wait()
 
 
 def command_pause(arguments):
@@ -478,8 +501,8 @@ Usage: {0} [--clear] (<song> [options] | --id <songid>)...
         if sid.lower() == "--id":
             sid = arguments.pop(0)
             for source in range(len(music_sources)):
-                if music_sources[source].get_track_data(sid) is not None:
-                    song = Song(source, sid)
+                if next(music_sources[source].get_track_data(sid)) is not None:
+                    song = Song(music_sources[source], sid)
                     items[-1].append(song)
                     order.append((len(items)-1, len(items[-1])-1))
                     break
@@ -489,6 +512,9 @@ Usage: {0} [--clear] (<song> [options] | --id <songid>)...
                 key = None
                 value = None
                 if arguments[0].startswith("--"):
+                    if arguments[0].lower() == "--id":
+                        # Stop, next song is specified by ID
+                        break
                     if len(arguments[0].split("=")) == 2:
                         kv = arguments.pop(0).split("=")
                         key = kv[0].lower()
@@ -509,10 +535,16 @@ Usage: {0} [--clear] (<song> [options] | --id <songid>)...
                     sources = list(range(len(music_sources)))
                 else:
                     args["source"] = args["s"]
-                    sources = [int(args["source"])]
+                    s = args["source"]
+                    if s.isdigit():
+                        sources = [int(s)]
+                    else:
+                        sources = [static_ids[s]]
             else:
                 sources = [int(args["source"])]
-            best = search_for_song(sources, sid)
+            if args.get("a") is not None:
+                args["artist"] = args["a"]
+            best = search_for_song(sources, sid, args.get("artist", None))
             if best is not None:
                 items[-1].append(best[1])
                 order.append((len(items)-1, len(items[-1])-1))
@@ -522,26 +554,48 @@ Usage: {0} [--clear] (<song> [options] | --id <songid>)...
                 else:
                     print(f"Could not find song '{sid}' in source "
                           + str(args["source"]) + ".")
-    # print(items)
-    # print(order)
     set_queue(items, order)
 
 
-def search_for_song(sources, sid):
+def search_for_song(sources, sid, artist):
     best = None
     for source in sources:
-        for track in music_sources[source].get_track_data():
-            r = fuzz.partial_ratio(track["title"], sid)
-            if r >= 80 and (best is None or best[0] < r):
-                best = (r, Song(source, track["id"]))
+        if artist is None:
+            for track in music_sources[source].get_track_data():
+                r = fuzz.partial_ratio(track["title"], sid)
+                if r >= 80 and (best is None or best[0] < r):
+                    best = (r, Song(music_sources[source], track["id"]))
+        else:
+            a = process.extractOne(artist,
+                                   music_sources[source].get_artists())[0]
+            for track in music_sources[source].get_track_data():
+                if track["artist"] != a:
+                    # stop right here, don't continue checking this track
+                    continue
+                r = fuzz.partial_ratio(track["title"], sid)
+                if r >= 80 and (best is None or best[0] < r):
+                    best = (r, Song(music_sources[source], track["id"]))
     if best is None:  # Redo check with lowercase if none > 80%
         for source in sources:
-            for track in music_sources[source].get_track_data():
-                r = fuzz.partial_ratio(
-                    track["title"].lower(),
-                    sid.lower())
-                if r >= 80 and (best is None or best[0] < r):
-                    best = (r, Song(source, track["id"]))
+            if artist is None:
+                for track in music_sources[source].get_track_data():
+                    r = fuzz.partial_ratio(
+                        track["title"].lower(),
+                        sid.lower())
+                    if r >= 80 and (best is None or best[0] < r):
+                        best = (r, Song(music_sources[source], track["id"]))
+            else:
+                a = process.extractOne(artist,
+                                       music_sources[source].get_artists())[0]
+                for track in music_sources[source].get_track_data():
+                    if track["artist"] != a:
+                        # stop right here, don't continue checking this track
+                        continue
+                    r = fuzz.partial_ratio(
+                        track["title"].lower(),
+                        sid.lower())
+                    if r >= 80 and (best is None or best[0] < r):
+                        best = (r, Song(music_sources[source], track["id"]))
     return best
 
 
@@ -582,11 +636,9 @@ Usage: {0} [options]
             elif arg.startswith("-"):
                 for letter in arg[1:]:
                     args.add(letter)
-    #print(args)
 
 
 def command_volume(arguments):
-    global volume
     """
 Info:
     Sets the volume for music. Default is 1.0. Volume levels over 1.0 can cause
@@ -594,6 +646,7 @@ Info:
 
 Usage: {0} [rate]
     """
+    global volume
     if len(arguments) == 2:
         val = arguments[1]
         if not isinstance(val, str):
@@ -601,8 +654,8 @@ Usage: {0} [rate]
         volume = float(val)
     print(volume)
 
+
 def command_rate(arguments):
-    global rate
     """
 Info:
     Sets the play speed for music. Does not affect pitch. Can cause artifacts.
@@ -610,6 +663,7 @@ Info:
 
 Usage: {0} [rate]
     """
+    global rate
     if len(arguments) == 2:
         val = arguments[1]
         if not isinstance(val, str):
@@ -618,7 +672,8 @@ Usage: {0} [rate]
     print(rate)
 
 
-subcommands = {"shuffle": command_set_shuffle,
+subcommands = {
+               "shuffle": command_set_shuffle,
                "loop": command_set_loop,
                "list_queue": command_list_queue,
                "add_queue": command_add_queue,

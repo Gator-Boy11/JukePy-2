@@ -61,6 +61,9 @@ def _register_(serviceList, pluginProperties):
             self._ns = uuid.UUID(config["namespace"])
             self.rescan()
 
+        def get_static_id(self):
+            return self._ns
+
         '''def login(self):
             return self.get_status()'''
 
