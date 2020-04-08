@@ -47,7 +47,7 @@ def _setup_config():
         config.update(toml.load("plex_music_source/config.toml"))
     config["server"] = config.get("server", [])
     if config["namespace"] == "00000000-0000-0000-0000-000000000000":
-        config["namespace"] = str(uuid.uuid4())
+        config["namespace"] = str(uuid.uuid1())
 
 
 def _register_(serviceList, pluginProperties):
@@ -79,13 +79,10 @@ def _register_(serviceList, pluginProperties):
                 keyring.get_password(config["keyring_name"], self._user))
             self._connection = self._account.resource(self._server).connect()
             self._ready = True
-            # This line lets code make uuids for manually configured servers
-            self._static_id = self._conf.get("static-id", uuid.uuid4())
-            config["server"][index]["static-id"] = self._static_id
-            self.rescan()
 
-        def get_static_id(self):
-            return self._static_id
+            self.rescan()
+        '''def login(self):
+            return self.get_status()'''
 
         @classmethod
         def _write_config(self):
@@ -144,9 +141,6 @@ def _register_(serviceList, pluginProperties):
                 else:
                     yield None
 
-        def get_artists(self):
-            return set([x["artist"] for x in self.get_track_data()])
-
         def get_status(self):
             return music_manager.Status.READY
 
@@ -198,7 +192,6 @@ def command_add_plex_server(arguments):
     servers[-1]["username"] = username
     servers[-1]["server"] = server
     servers[-1]["section"] = section
-    servers[-1]["static-id"] = uuid.uuid4()
     config["server"] = servers
     PlexMusicSource._write_config()
     music_manager.add_source(PlexMusicSource(len(config["server"])-1))
