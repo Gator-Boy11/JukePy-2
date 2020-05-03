@@ -551,8 +551,6 @@ Usage: {0} [<song> [options] | --id <songid>]...
         command_remove_queue([["remove_queue"]])
         command_add_queue(arguments)
     set_playing(True)
-    #while _player_state < 40:
-    #    _player_state_change.wait()
 
 
 def command_pause(arguments):
@@ -764,11 +762,14 @@ Usage: {0} [options]
                 )[0]
             pretty_string = track_data.get("title", "[NO TITLE]")
             if "i" in args:
-                pretty_string += " | " + track_data.get("id", "[NO ID]")
+                pretty_string += " | " + \
+                    track_data.get("id", "[NO ID]")
             if "a" in args:
-                pretty_string += " | " + track_data.get("artist", "[NO ARTIST]")
+                pretty_string += " | " + \
+                    track_data.get("artist", "[NO ARTIST]")
             if "A" in args:
-                pretty_string += " | " + track_data.get("album", "[NO ALBUM]")
+                pretty_string += " | " + \
+                    track_data.get("album", "[NO ALBUM]")
             if "s" in args:
                 pretty_string += " | sources not yet supported"
             print(pretty_string)
@@ -807,6 +808,7 @@ Usage: {0} [rate]
         rate = float(val)
     print(rate)
 
+
 def command_play_playlist(arguments):
     """
 Info:
@@ -837,6 +839,7 @@ Usage: {0} <playlist>
                 return
     else:
         print("Playlist must be specified.")
+
 
 def command_list_playlists(arguments):
     """
@@ -937,6 +940,7 @@ Usage: {0} <playlist name> (<song> [options] | --id <songid>)...
                               True,
                               True))
     save_playlists()
+
 
 subcommands = {
                "shuffle": command_set_shuffle,

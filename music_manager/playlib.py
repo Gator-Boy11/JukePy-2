@@ -196,11 +196,6 @@ class Playlist:
         self._index += 1
         return v
 
-    #def next(self):
-        #if not self._loop:
-        #    self._loop_count += 1
-        #self._index += 1
-
     def prev(self):
         if not self._loop:
             self._loop_count -= 2

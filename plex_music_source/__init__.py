@@ -3,29 +3,17 @@ import time
 import os
 import uuid
 import getpass
-import platform
-import requests
-import io
-
-if platform.system() == "Windows":
-    os.environ["PATH"] = os.environ["PATH"]\
-        + ";"\
-        + __file__[:-11]\
-        + "libav-x86_64-w64-mingw32-11.7/usr/bin".replace("/", os.sep)
 
 import toml
-#from pydub import AudioSegment
 import ffmpeg
 import keyring
 import plexapi
 import plexapi.myplex
 import plexapi.audio
-#from tinytag import TinyTag
 
 pillow_available = False
 try:
     from PIL import Image
-    from io import BytesIO
     pillow_available = True
 except ImportError:
     pass
@@ -58,7 +46,8 @@ def _register_(serviceList, pluginProperties):
     music_manager = services["music_manager"][0]
     userInterface = services["userInterface"][0]
     _setup_config()
-    userInterface.addCommands({"plex": {"add_server": command_add_plex_server}})
+    userInterface.addCommands({"plex":
+                               {"add_server": command_add_plex_server}})
     core.addStart(start_thread)
     core.addClose(close_thread)
 
@@ -152,8 +141,6 @@ def _register_(serviceList, pluginProperties):
 
         def get_playlists(self):
             plex_playlists = self._connection.playlists()
-            #print(plex_playlists)
-            #input("enter to continue")
             for plex_playlist in plex_playlists:
                 unique = plex_playlist.key
                 name = plex_playlist.title
@@ -163,19 +150,15 @@ def _register_(serviceList, pluginProperties):
                 for raw_song in plex_playlist.items():
                     song_unique = raw_song.key
                     u = str(uuid.uuid5(self._ns, song_unique))
-                    #print(raw_song.title)
                     songs.append(music_manager.Song(self, u))
                 saveable = False
                 writeable = False
-                #print(name, source, id)
-                #input("enter to continue")
                 yield music_manager.Playlist(name,
                                              source,
                                              id,
                                              songs,
                                              saveable,
                                              writeable)
-            #return []
 
     PlexMusicSource._write_config()
     print("\nScanning plex library, this may take a while... ", end="")

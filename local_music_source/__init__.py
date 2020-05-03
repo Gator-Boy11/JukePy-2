@@ -51,7 +51,6 @@ def _register_(serviceList, pluginProperties):
     _setup_config()
     core.addStart(startThread)
     core.addClose(closeThread)
-    #core.addLoop(loopTask)
 
     class LocalMusicSource(music_manager.MusicSource):
         _instances = []
