@@ -1,0 +1,14 @@
+[properties]
+name = pi_gui_display_pygame
+version = 0.1.0
+service = gui_display
+exclusive = no
+
+[order]
+before = []
+after = [{"plugin":"$core", "priority":0}]
+
+[updates]
+remoteroot = https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/JukePi/
+localroot = _APPLES_/
+files = [["pi_gui_display_pygame.apm", "pi_gui_display_pygame.apm"], ["pi_gui_display_pygame/__init__.py", "pi_gui_display_pygame/__init__.py"]]

@@ -1,6 +1,6 @@
 [properties]
 name = music_manager
-version = 0.6.1
+version = 0.6.3
 service = music_manager
 exclusive = no
 

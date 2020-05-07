@@ -27,7 +27,7 @@ plugin = {}
 core = None
 music_manager = None
 runThread = None
-threadActive = False
+thread_active = False
 LocalMusicSource = None
 config = {}
 
@@ -175,24 +175,27 @@ def loopTask():
 
 
 def startThread():
-    global runThread, threadActive
-    threadActive = True
+    global runThread, thread_active
+    thread_active = True
     runThread = threading.Thread(target=threadScript)
     runThread.start()
 
 
 def closeThread():
-    global runThread, threadActive
-    threadActive = False
+    global runThread, thread_active
+    thread_active = False
     runThread.join()
 
 
 def threadScript():
-    global threadActive, LocalMusicSource, config
-    while threadActive:
+    global thread_active, LocalMusicSource, config
+    while thread_active:
         for instance in LocalMusicSource._instances:
             instance.rescan()
-            time.sleep(config["rescan_delay"])
-            if not threadActive:
+            for tc in range(round(config["rescan_delay"])):
+                time.sleep(1)
+                if not thread_active:
+                    break
+            if not thread_active:
                 break
-    threadActive = False
+    thread_active = False

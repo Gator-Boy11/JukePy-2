@@ -1,6 +1,6 @@
 [properties]
 name = local_music_source
-version = 0.2.3
+version = 0.2.4
 service = music_manager_source
 exclusive = no
 
