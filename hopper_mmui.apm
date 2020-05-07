@@ -1,0 +1,14 @@
+[properties]
+name = hopper_mmui
+version = 0.1.0
+service = userInterface
+exclusive = no
+
+[order]
+before = []
+after = [{"plugin":"$core", "priority":0}]
+
+[updates]
+remoteroot = https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/
+localroot = _APPLES_/
+files = [["hopper_mmui.apm", "hopper_mmui.apm"], ["hopper_mmui/__init__.py", "hopper_mmui/__init__.py"]]

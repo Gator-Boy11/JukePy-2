@@ -3,6 +3,7 @@ import time
 import os
 import uuid
 import getpass
+import urllib.request
 
 import toml
 import ffmpeg
@@ -101,6 +102,10 @@ def _register_(serviceList, pluginProperties):
                         track["frame_width"] = 2
                         track["channels"] = 2
                         tracks[u] = track
+                        if plex_track.thumbUrl is not None:
+                            thumb = urllib.request.urlopen(plex_track.thumbUrl)
+                            if thumb is not None:
+                                images[u] = Image.open(thumb)
             self._tracks = tracks
             self._images = images
             # input("enter")
@@ -138,6 +143,9 @@ def _register_(serviceList, pluginProperties):
 
         def get_status(self):
             return music_manager.Status.READY
+
+        def get_track_art(self, trackid):
+            return self._images.get(trackid, None)
 
         def get_playlists(self):
             plex_playlists = self._connection.playlists()
@@ -187,7 +195,10 @@ def thread_script():
     while thread_active:
         for instance in PlexMusicSource._instances:
             instance.rescan()
-            time.sleep(config["rescan_delay"])
+            for tc in range(round(config["rescan_delay"])):
+                time.sleep(1)
+                if not thread_active:
+                    break
             if not thread_active:
                 break
     thread_active = False

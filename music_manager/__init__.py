@@ -105,7 +105,7 @@ def start_thread():
 def close_thread():
     global runThread, threadActive
     threadActive = False
-    _playing.set()
+    set_player_state(-10)
     runThread.join()
 
 
@@ -291,7 +291,11 @@ def threadScript():
     while threadActive:
         _player_state_change.wait()
         _player_state_change.clear()
-        if _player_state == 0:
+        if _player_state == -10:
+            # exiting
+            _player_state_change_complete.set()
+            break
+        elif _player_state == 0:
             # stopped
             if stream is not None:
                 # close any existing streams
@@ -475,6 +479,10 @@ def set_playing(state):
             set_player_state(50)
 
 
+def get_playing():
+    return _player_state in {10, 20, 30, 40, 70, 80}
+
+
 def set_shuffle(state):
     _queue.set_shuffle(state)
 
@@ -493,6 +501,24 @@ def prev_song():
 
 def stop():
     set_player_state(0)
+
+
+def get_tracks():
+    for source in music_sources:
+        for track in source.get_track_data():
+            yield track
+
+
+def get_songs():
+    for source in music_sources:
+        for track in source.get_track_data():
+            yield Song(source, track["id"])
+
+
+def get_song_from_id(sid):
+    for source in range(len(music_sources)):
+        if next(music_sources[source].get_track_data(sid)) is not None:
+            return Song(music_sources[source], sid)
 
 
 def command_set_loop(arguments):
