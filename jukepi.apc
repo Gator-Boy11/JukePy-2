@@ -1,9 +1,9 @@
 {
 	"ver":"0.0.1",
 	"format":"0.1.0",
-	"name":"jukepy",
-	"local":"_APPLES_/jukepy.apc",
-	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/builtins.apc",
+	"name":"jukepi",
+	"local":"_APPLES_/jukepi.apc",
+	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/jukepi.apc",
 	"collection":[
 		{
 			"type":"plugin",
@@ -37,8 +37,8 @@
 		},
 		{
 			"type":"plugin",
-			"local":"_APPLES_/pi_gui_display_pygame.apm",
-			"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/pi_gui_display_pygame.apm"
+			"local":"_APPLES_/pi_gui_display_adafruit.apm",
+			"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/JukePi/pi_gui_display_adafruit.apm"
 		},
 		{
 			"type":"plugin",
