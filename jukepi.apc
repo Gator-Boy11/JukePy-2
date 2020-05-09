@@ -1,9 +1,9 @@
 {
-	"ver":"0.0.1",
+	"ver":"0.0.2",
 	"format":"0.1.0",
 	"name":"jukepi",
 	"local":"_APPLES_/jukepi.apc",
-	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/jukepi.apc",
+	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/JukePi/jukepi.apc",
 	"collection":[
 		{
 			"type":"plugin",
