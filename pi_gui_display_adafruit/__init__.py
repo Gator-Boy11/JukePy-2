@@ -1,5 +1,6 @@
 import digitalio
 import board
+from gpiozero import Button
 
 # import adafruit_rgb_display.ili9341 as ili9341
 # import adafruit_rgb_display.st7789 as st7789
@@ -35,6 +36,9 @@ def _register_(serviceList, pluginProperties):
     gui_core = services["gui_core"][0]
 
 
+buttons = []
+
+
 def setup():
     global render_size, screen_size
     setup_ssd1351_150()
@@ -46,6 +50,21 @@ def setup():
         height = disp.height
     screen_size = render_size = (width, height)
     gui_core.prepare(render_size)
+
+    buttons.append(Button(4, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:toggle_menu")
+    buttons.append(Button(17, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:menu_up")
+    buttons.append(Button(23, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:menu_down")
+    buttons.append(Button(27, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:menu_select")
+    buttons.append(Button(20, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:increment_tab")
+    buttons.append(Button(16, pull_up=None, active_state=True))
+    buttons[-1].when_pressed = lambda x: gui_core.trigger((0, 0), "action:decrement_tab")
+    print(buttons)
+
     return render_size
 
 
