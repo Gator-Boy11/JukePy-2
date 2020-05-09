@@ -13,6 +13,7 @@ thread_active = False
 screen = None
 screen_size = (128*4, 128*4)
 render_size = (128*4, 128*4)
+fullscreen = False
 _window_name = "pi_gui_display_pygame"
 _fps = 60
 clock = None
@@ -34,7 +35,12 @@ def setup():
     global screen, clock
     pygame.init()
     pygame.display.set_caption(_window_name)
-    screen = pygame.display.set_mode(screen_size)
+    if fullscreen:
+        global render_size, screen_size
+        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        screen_size = render_size = screen.get_size()
+    else:
+        screen = pygame.display.set_mode(screen_size)
     gui_core.prepare(render_size)
     clock = pygame.time.Clock()
     return render_size

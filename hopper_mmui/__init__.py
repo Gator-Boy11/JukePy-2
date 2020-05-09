@@ -2,6 +2,7 @@ import threading
 from collections import namedtuple
 import os
 import time
+import zipfile
 
 services = {}
 plugin = {}
@@ -32,10 +33,23 @@ def _register_(serviceList, pluginProperties):
 def setup():
     global _screen_dimen
     _screen_dimen = gui_display.setup()
+    unpack_fonts()
     setup_modes()
     gui_core.switch_mode("_start")
     gui_display.set_name("JukePy 2")
 
+
+def unpack_fonts():
+    with zipfile.ZipFile(_hopper_root + "fonts.zip", 'r') as font_zip:
+        with font_zip.open('VERSION.txt', "r") as v:
+            zip_version = v.read()
+        try:
+            with open(_hopper_fonts_root + "VERSION.txt", "rb") as v:
+                extracted_version = v.read()
+            if extracted_version != zip_version:
+                font_zip.extractall(_hopper_fonts_root)
+        except FileNotFoundError:
+            font_zip.extractall(_hopper_fonts_root)
 
 _global_hs = None
 
@@ -417,7 +431,7 @@ def _update_menu(reset_scroll=True):
             gui_core.Text.from_truetype(
                 option.text,
                 _hopper_fonts_root + "Work_Sans" + os.sep + "static" + os.sep
-                + "WorkSans-Regular.ttf",
+                + "WorkSans-Medium.ttf",
                 (90, 90, 90, 255),
                 _screen_dimen[0]//10,
                 (_screen_dimen[0]*9//64, position)

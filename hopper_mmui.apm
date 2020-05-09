@@ -1,6 +1,6 @@
 [properties]
 name = hopper_mmui
-version = 0.1.0
+version = 0.1.1
 service = userInterface
 exclusive = no
 

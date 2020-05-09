@@ -3,6 +3,7 @@ from collections import namedtuple
 import os
 import json
 import time
+import zipfile
 
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
@@ -57,6 +58,20 @@ mode = "_start"
 def prepare(dimensions):
     global dimen
     dimen = dimensions
+    unpack_fonts()
+
+
+def unpack_fonts():
+    with zipfile.ZipFile(__file__[:-11] + "fonts.zip", 'r') as font_zip:
+        with font_zip.open('VERSION.txt', "r") as v:
+            zip_version = v.read()
+        try:
+            with open(__file__[:-11] + "fonts/" + "VERSION.txt", "rb") as v:
+                extracted_version = v.read()
+            if extracted_version != zip_version:
+                font_zip.extractall(__file__[:-11] + "fonts/")
+        except FileNotFoundError:
+            font_zip.extractall(__file__[:-11] + "fonts/")
 
 
 def define_mode(mode, compositing_order, hotspots=[]):
@@ -258,6 +273,8 @@ class SubImage(DynamicImage):
             im.draw_to(frame)
         return frame
 
+
+unpack_fonts()
 
 _fa_root = __file__[:-11] + os.sep \
     + "fonts" + os.sep + "fontawesome-5-free" + os.sep
