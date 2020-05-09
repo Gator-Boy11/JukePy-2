@@ -1,6 +1,6 @@
 [properties]
 name = music_manager
-version = 0.6.3
+version = 0.6.4
 service = music_manager
 exclusive = no
 
@@ -11,4 +11,4 @@ after = [{"plugin":"$core", "priority":0}, {"plugin":"$audio_output", "priority"
 [updates]
 remoteroot = https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/
 localroot = _APPLES_/
-files = [["music_manager.apm", "music_manager.apm"], ["music_manager/__init__.py", "music_manager/__init__.py"]]
+files = [["music_manager.apm", "music_manager.apm"], ["music_manager/__init__.py", "music_manager/__init__.py"], ["music_manager/playlib.py", "music_manager/playlib.py"]]
