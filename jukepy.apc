@@ -3,7 +3,7 @@
 	"format":"0.1.0",
 	"name":"jukepy",
 	"local":"_APPLES_/jukepy.apc",
-	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/builtins.apc",
+	"remote":"https://raw.githubusercontent.com/Gator-Boy11/JukePy-2/master/jukepy.apc",
 	"collection":[
 		{
 			"type":"plugin",
